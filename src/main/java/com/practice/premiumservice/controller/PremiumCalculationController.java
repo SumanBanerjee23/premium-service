@@ -4,6 +4,7 @@ import com.practice.premiumservice.dto.PremiumCalculationRequest;
 import com.practice.premiumservice.dto.PremiumCalculationResponse;
 import com.practice.premiumservice.entity.CustomerRequest;
 import com.practice.premiumservice.entity.PremiumCalculation;
+import com.practice.premiumservice.exception.ResourceNotFoundException;
 import com.practice.premiumservice.mapper.PremiumCalculationMapper;
 import com.practice.premiumservice.service.PremiumCalculationService;
 import com.practice.premiumservice.service.RegionalDataService;
@@ -78,14 +79,12 @@ public class PremiumCalculationController {
         
         logger.info("Received premium calculation request: {}", request);
         
-        // Validate postal code
+        // Validate postal code - will throw exception if invalid
         if (!regionalDataService.isPostalCodeValid(request.postalCode())) {
-            logger.warn("Invalid postal code: {}", request.postalCode());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            throw new ResourceNotFoundException("Postal code not found: " + request.postalCode());
         }
         
         CustomerRequest customerRequest = PremiumCalculationMapper.toCustomerRequest(request);
-        
         PremiumCalculation calculation = premiumCalculationService.calculatePremium(customerRequest);
         PremiumCalculationResponse response = PremiumCalculationMapper.toResponse(calculation);
         

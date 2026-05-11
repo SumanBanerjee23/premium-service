@@ -6,7 +6,7 @@ spring:
     name: premium-service
   
   datasource:
-    url: jdbc:h2:mem:premiumdb
+    url: jdbc:h2:file:./data/premiumdb
     driver-class-name: org.h2.Driver
     username: sa
     password: password
@@ -19,7 +19,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:

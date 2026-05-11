@@ -2,6 +2,7 @@ package com.practice.premiumservice.unit.service;
 
 import com.practice.premiumservice.entity.CustomerRequest;
 import com.practice.premiumservice.entity.PremiumCalculation;
+import com.practice.premiumservice.exception.ResourceNotFoundException;
 import com.practice.premiumservice.model.PostalCodeData;
 import com.practice.premiumservice.repository.CustomerRequestRepository;
 import com.practice.premiumservice.repository.PremiumCalculationRepository;
@@ -307,7 +308,7 @@ class PremiumCalculationServiceTest {
 
         // Act + Assert
         assertThatThrownBy(() -> service.getCalculationById(calculationId))
-            .isInstanceOf(IllegalArgumentException.class)
+            .isInstanceOf(ResourceNotFoundException.class)
             .hasMessage("Premium calculation not found with ID: " + calculationId);
 
         verify(premiumCalculationRepository).findById(calculationId);

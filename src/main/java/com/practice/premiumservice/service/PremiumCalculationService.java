@@ -2,6 +2,7 @@ package com.practice.premiumservice.service;
 
 import com.practice.premiumservice.entity.CustomerRequest;
 import com.practice.premiumservice.entity.PremiumCalculation;
+import com.practice.premiumservice.exception.ResourceNotFoundException;
 import com.practice.premiumservice.repository.CustomerRequestRepository;
 import com.practice.premiumservice.repository.PremiumCalculationRepository;
 import org.slf4j.Logger;
@@ -91,7 +92,7 @@ public class PremiumCalculationService {
     @Transactional(readOnly = true)
     public PremiumCalculation getCalculationById(Long id) {
         return premiumCalculationRepository.findById(id)
-            .orElseThrow(() -> new IllegalArgumentException("Premium calculation not found with ID: " + id));
+            .orElseThrow(() -> new ResourceNotFoundException("Premium calculation not found with ID: " + id));
     }
     
     @Transactional(readOnly = true)

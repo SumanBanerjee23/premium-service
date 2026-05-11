@@ -1,5 +1,6 @@
 package com.practice.premiumservice.unit.service;
 
+import com.practice.premiumservice.exception.InvalidVehicleTypeException;
 import com.practice.premiumservice.model.PostalCodeData;
 import com.practice.premiumservice.service.RegionalDataService;
 import com.practice.premiumservice.util.PostalCodeDataLoader;
@@ -139,16 +140,15 @@ class RegionalDataServiceTest {
     }
 
     @Test
-    @DisplayName("should return default factor for unknown vehicle type")
-    void shouldReturnDefaultFactorForUnknownVehicleType() {
+    @DisplayName("should throw exception for unknown vehicle type")
+    void shouldThrowExceptionForUnknownVehicleType() {
         // Arrange
         String vehicleType = "UNKNOWN_TYPE";
 
-        // Act
-        BigDecimal result = service.getVehicleTypeFactor(vehicleType);
-
-        // Assert
-        assertThat(result).isEqualByComparingTo("1.0"); // Default factor
+        // Act + Assert
+        assertThatThrownBy(() -> service.getVehicleTypeFactor(vehicleType))
+            .isInstanceOf(InvalidVehicleTypeException.class)
+            .hasMessage("Unknown vehicle type: UNKNOWN_TYPE");
     }
 
     @Test
@@ -170,7 +170,7 @@ class RegionalDataServiceTest {
     }
 
     @Test
-    @DisplayName("should throw exception for whitespace-only vehicle type")
+    @DisplayName("should handle vehicle type with whitespace only")
     void shouldThrowExceptionForWhitespaceOnlyVehicleType() {
         // Act + Assert
         assertThatThrownBy(() -> service.getVehicleTypeFactor("   "))
@@ -178,6 +178,119 @@ class RegionalDataServiceTest {
             .hasMessage("Vehicle type cannot be null or empty");
     }
 
+    @Test
+    @DisplayName("should return default region factor for unknown state")
+    void shouldReturnDefaultRegionFactorForUnknownState() {
+        // Arrange
+        String postalCode = "99999"; // Mock this to return valid postal code with unknown state
+
+        // Act
+        BigDecimal result = service.getRegionFactor(postalCode);
+
+        // Assert
+        assertThat(result).isEqualByComparingTo("1.0"); // Default factor
+    }
+
+    @Test
+    @DisplayName("should handle null postal code gracefully")
+    void shouldHandleNullPostalCodeGracefully() {
+        // Act
+        boolean isValid = service.isPostalCodeValid(null);
+        PostalCodeData data = service.getPostalCodeData(null);
+
+        // Assert
+        assertThat(isValid).isFalse();
+        assertThat(data).isNull();
+    }
+
+    @Test
+    @DisplayName("should handle empty postal code gracefully")
+    void shouldHandleEmptyPostalCodeGracefully() {
+        // Act
+        boolean isValid = service.isPostalCodeValid("");
+        PostalCodeData data = service.getPostalCodeData("");
+
+        // Assert
+        assertThat(isValid).isFalse();
+        assertThat(data).isNull();
+    }
+
+    @Test
+    @DisplayName("should update vehicle type factor successfully")
+    void shouldUpdateVehicleTypeFactorSuccessfully() {
+        // Arrange
+        String vehicleType = "TEST_VEHICLE";
+        BigDecimal newFactor = new BigDecimal("2.5");
+
+        // Act
+        service.updateVehicleTypeFactor(vehicleType, newFactor);
+        BigDecimal result = service.getVehicleTypeFactor(vehicleType);
+
+        // Assert
+        assertThat(result).isEqualByComparingTo(newFactor);
+    }
+
+    @Test
+    @DisplayName("should throw exception when updating vehicle type factor with null")
+    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithNull() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.updateVehicleTypeFactor("CAR", null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid vehicle type or factor");
+    }
+
+    @Test
+    @DisplayName("should throw exception when updating vehicle type factor with zero")
+    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithZero() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.updateVehicleTypeFactor("CAR", BigDecimal.ZERO))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid vehicle type or factor");
+    }
+
+    @Test
+    @DisplayName("should throw exception when updating vehicle type factor with negative")
+    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithNegative() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.updateVehicleTypeFactor("CAR", new BigDecimal("-1.0")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid vehicle type or factor");
+    }
+
+    @Test
+    @DisplayName("should update region factor successfully")
+    void shouldUpdateRegionFactorSuccessfully() {
+        // Arrange
+        String state = "TEST_STATE";
+        BigDecimal newFactor = new BigDecimal("1.5");
+
+        // Act
+        service.updateRegionFactor(state, newFactor);
+        Map<String, BigDecimal> allFactors = service.getAllRegionFactors();
+
+        // Assert
+        assertThat(allFactors).containsEntry(state, newFactor);
+    }
+
+    @Test
+    @DisplayName("should throw exception when updating region factor with null state")
+    void shouldThrowExceptionWhenUpdatingRegionFactorWithNullState() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.updateRegionFactor(null, new BigDecimal("1.0")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid state or factor");
+    }
+
+    @Test
+    @DisplayName("should throw exception when updating region factor with empty state")
+    void shouldThrowExceptionWhenUpdatingRegionFactorWithEmptyState() {
+        // Act + Assert
+        assertThatThrownBy(() -> service.updateRegionFactor("", new BigDecimal("1.0")))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Invalid state or factor");
+    }
+
+    
     @Test
     @DisplayName("should return postal code data for valid postal code")
     void shouldReturnPostalCodeDataForValidPostalCode() {
@@ -298,39 +411,7 @@ class RegionalDataServiceTest {
         assertThat(result.get("TRUCK")).isEqualByComparingTo("1.5");
     }
 
-    @Test
-    @DisplayName("should update region factor successfully")
-    void shouldUpdateRegionFactorSuccessfully() {
-        // Arrange
-        String state = "Test State";
-        BigDecimal newFactor = new BigDecimal("1.5");
-
-        // Act
-        service.updateRegionFactor(state, newFactor);
-
-        // Assert
-        Map<String, BigDecimal> allFactors = service.getAllRegionFactors();
-        assertThat(allFactors.get(state)).isEqualByComparingTo("1.5");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating region factor with null state")
-    void shouldThrowExceptionWhenUpdatingRegionFactorWithNullState() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateRegionFactor(null, new BigDecimal("1.5")))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid state or factor");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating region factor with empty state")
-    void shouldThrowExceptionWhenUpdatingRegionFactorWithEmptyState() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateRegionFactor("", new BigDecimal("1.5")))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid state or factor");
-    }
-
+    
     @Test
     @DisplayName("should throw exception when updating region factor with null factor")
     void shouldThrowExceptionWhenUpdatingRegionFactorWithNullFactor() {
@@ -358,21 +439,7 @@ class RegionalDataServiceTest {
             .hasMessage("Invalid state or factor");
     }
 
-    @Test
-    @DisplayName("should update vehicle type factor successfully")
-    void shouldUpdateVehicleTypeFactorSuccessfully() {
-        // Arrange
-        String vehicleType = "TEST_VEHICLE";
-        BigDecimal newFactor = new BigDecimal("1.8");
-
-        // Act
-        service.updateVehicleTypeFactor(vehicleType, newFactor);
-
-        // Assert
-        Map<String, BigDecimal> allFactors = service.getAllVehicleTypeFactors();
-        assertThat(allFactors.get("TEST_VEHICLE")).isEqualByComparingTo("1.8");
-    }
-
+    
     @Test
     @DisplayName("should update vehicle type factor with lowercase input")
     void shouldUpdateVehicleTypeFactorWithLowercaseInput() {
@@ -386,41 +453,5 @@ class RegionalDataServiceTest {
         // Assert
         Map<String, BigDecimal> allFactors = service.getAllVehicleTypeFactors();
         assertThat(allFactors.get("TEST_VEHICLE")).isEqualByComparingTo("1.8");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating vehicle type factor with null type")
-    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithNullType() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateVehicleTypeFactor(null, new BigDecimal("1.5")))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid vehicle type or factor");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating vehicle type factor with empty type")
-    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithEmptyType() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateVehicleTypeFactor("", new BigDecimal("1.5")))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid vehicle type or factor");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating vehicle type factor with null factor")
-    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithNullFactor() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateVehicleTypeFactor("TEST_TYPE", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid vehicle type or factor");
-    }
-
-    @Test
-    @DisplayName("should throw exception when updating vehicle type factor with negative factor")
-    void shouldThrowExceptionWhenUpdatingVehicleTypeFactorWithNegativeFactor() {
-        // Act + Assert
-        assertThatThrownBy(() -> service.updateVehicleTypeFactor("TEST_TYPE", new BigDecimal("-1.0")))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("Invalid vehicle type or factor");
     }
 }

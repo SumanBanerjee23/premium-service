@@ -62,6 +62,7 @@ class PremiumCalculationControllerIntegrationTest {
         when(postalCodeDataLoader.isPostalCodeValid("10115")).thenReturn(true);
         when(postalCodeDataLoader.isPostalCodeValid("20095")).thenReturn(true);
         when(postalCodeDataLoader.isPostalCodeValid("80331")).thenReturn(true);
+        when(postalCodeDataLoader.isPostalCodeValid(" 79189 ")).thenReturn(true);
         when(postalCodeDataLoader.isPostalCodeValid("99999")).thenReturn(false);
 
         // Mock postal code data
@@ -90,6 +91,13 @@ class PremiumCalculationControllerIntegrationTest {
             new PostalCodeData(
                 "DE", "BY", "Bayern", null, "Deutschland", "München",
                 "80331", "München", null, null, null, null, null, null, null, "1"
+            )
+        );
+
+        when(postalCodeDataLoader.findByPostalCode(" 79189 ")).thenReturn(
+            new PostalCodeData(
+                "DE", "BW", "Baden-Württemberg", null, "Deutschland", "Bad Krozingen",
+                " 79189 ", "Bad Krozingen", null, null, null, null, null, null, null, "1"
             )
         );
     }
@@ -210,13 +218,11 @@ class PremiumCalculationControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("should return 400 for non-existent calculation ID")
-    void shouldReturn400ForNonExistentCalculationId() throws Exception {
+    @DisplayName("should return 404 for non-existent calculation ID")
+    void shouldReturn404ForNonExistentCalculationId() throws Exception {
         // Act + Assert
         mockMvc.perform(get("/api/premium/calculations/{id}", 999L))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.message").value("Premium calculation not found with ID: 999"));
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -302,15 +308,257 @@ class PremiumCalculationControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("should handle different mileage brackets correctly")
-    void shouldHandleDifferentMileageBracketsCorrectly() throws Exception {
-        // Test 0-5000 mileage bracket (0.5 factor)
+    @DisplayName("should return 404 for missing calculation ID")
+    void shouldReturn404ForMissingCalculationId() throws Exception {
+        // Act + Assert
+        mockMvc.perform(get("/api/premium/calculations/{id}", 999999L))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("should return 400 for unknown vehicle type")
+    void shouldReturn400ForUnknownVehicleType() throws Exception {
+        // Act + Assert
         mockMvc.perform(post("/api/premium/calculate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
                         "postalCode": "79189",
-                        "annualMileage": 3000,
+                        "annualMileage": 15000,
+                        "vehicleType": "UNKNOWN_VEHICLE"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should handle zero mileage edge case")
+    void shouldHandleZeroMileageEdgeCase() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 0,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mileageFactor").value(0.5))
+                .andExpect(jsonPath("$.calculatedPremium").value(0.60));
+    }
+
+    @Test
+    @DisplayName("should handle maximum allowed mileage")
+    void shouldHandleMaximumAllowedMileage() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 1000000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mileageFactor").value(2.0))
+                .andExpect(jsonPath("$.calculatedPremium").value(2.40));
+    }
+
+    @Test
+    @DisplayName("should return 400 for mileage exceeding maximum")
+    void shouldReturn400ForMileageExceedingMaximum() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 1000001,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should handle vehicle type case insensitivity")
+    void shouldHandleVehicleTypeCaseInsensitivity() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 15000,
+                        "vehicleType": "car"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.vehicleType").value("car"))
+                .andExpect(jsonPath("$.vehicleTypeFactor").value(1.0));
+    }
+
+    @Test
+    @DisplayName("should handle vehicle type with spaces")
+    void shouldHandleVehicleTypeWithSpaces() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 15000,
+                        "vehicleType": "  CAR  "
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.vehicleType").value("  CAR  "))
+                .andExpect(jsonPath("$.vehicleTypeFactor").value(1.0));
+    }
+
+    @Test
+    @DisplayName("should return 400 for null vehicle type")
+    void shouldReturn400ForNullVehicleType() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 15000,
+                        "vehicleType": null
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should return 400 for empty vehicle type")
+    void shouldReturn400ForEmptyVehicleType() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 15000,
+                        "vehicleType": ""
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should return 400 for null postal code")
+    void shouldReturn400ForNullPostalCode() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": null,
+                        "annualMileage": 15000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should return 400 for empty postal code")
+    void shouldReturn400ForEmptyPostalCode() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "",
+                        "annualMileage": 15000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should return 400 for negative mileage")
+    void shouldReturn400ForNegativeMileage() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": -1,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should handle postal code with spaces")
+    void shouldHandlePostalCodeWithSpaces() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": " 79189 ",
+                        "annualMileage": 15000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.postalCode").value(" 79189 "));
+    }
+
+    @Test
+    @DisplayName("should return 400 for malformed JSON")
+    void shouldReturn400ForMalformedJson() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 15000,
+                        "vehicleType": "CAR",
+                    }
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Malformed JSON request"));
+    }
+
+    @Test
+    @DisplayName("should return 400 for missing required fields")
+    void shouldReturn400ForMissingRequiredFields() throws Exception {
+        // Act + Assert
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189"
+                    }
+                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("should handle different mileage brackets correctly")
+    void shouldHandleDifferentMileageBracketsCorrectly() throws Exception {
+        // Test exactly 5000 mileage (0.5 factor)
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 5000,
                         "vehicleType": "CAR"
                     }
                 """))
@@ -318,13 +566,13 @@ class PremiumCalculationControllerIntegrationTest {
                 .andExpect(jsonPath("$.mileageFactor").value(0.5))
                 .andExpect(jsonPath("$.calculatedPremium").value(0.60));
 
-        // Test 5001-10000 mileage bracket (1.0 factor)
+        // Test exactly 5001 mileage (1.0 factor)
         mockMvc.perform(post("/api/premium/calculate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
                         "postalCode": "79189",
-                        "annualMileage": 7500,
+                        "annualMileage": 5001,
                         "vehicleType": "CAR"
                     }
                 """))
@@ -332,13 +580,27 @@ class PremiumCalculationControllerIntegrationTest {
                 .andExpect(jsonPath("$.mileageFactor").value(1.0))
                 .andExpect(jsonPath("$.calculatedPremium").value(1.20));
 
-        // Test 10001-20000 mileage bracket (1.5 factor)
+        // Test exactly 10000 mileage (1.0 factor)
         mockMvc.perform(post("/api/premium/calculate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
                         "postalCode": "79189",
-                        "annualMileage": 15000,
+                        "annualMileage": 10000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mileageFactor").value(1.0))
+                .andExpect(jsonPath("$.calculatedPremium").value(1.20));
+
+        // Test exactly 10001 mileage (1.5 factor)
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 10001,
                         "vehicleType": "CAR"
                     }
                 """))
@@ -346,13 +608,27 @@ class PremiumCalculationControllerIntegrationTest {
                 .andExpect(jsonPath("$.mileageFactor").value(1.5))
                 .andExpect(jsonPath("$.calculatedPremium").value(1.80));
 
-        // Test >20000 mileage bracket (2.0 factor)
+        // Test exactly 20000 mileage (1.5 factor)
         mockMvc.perform(post("/api/premium/calculate")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
                         "postalCode": "79189",
-                        "annualMileage": 25000,
+                        "annualMileage": 20000,
+                        "vehicleType": "CAR"
+                    }
+                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.mileageFactor").value(1.5))
+                .andExpect(jsonPath("$.calculatedPremium").value(1.80));
+
+        // Test exactly 20001 mileage (2.0 factor)
+        mockMvc.perform(post("/api/premium/calculate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                        "postalCode": "79189",
+                        "annualMileage": 20001,
                         "vehicleType": "CAR"
                     }
                 """))

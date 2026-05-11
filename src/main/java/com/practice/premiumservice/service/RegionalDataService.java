@@ -1,5 +1,6 @@
 package com.practice.premiumservice.service;
 
+import com.practice.premiumservice.exception.InvalidVehicleTypeException;
 import com.practice.premiumservice.model.PostalCodeData;
 import com.practice.premiumservice.util.PostalCodeDataLoader;
 import org.slf4j.Logger;
@@ -93,8 +94,8 @@ public class RegionalDataService {
         BigDecimal factor = vehicleTypeFactors.get(normalizedVehicleType);
         
         if (factor == null) {
-            logger.warn("Vehicle type factor not found for: {}, using default factor", normalizedVehicleType);
-            return BigDecimal.ONE; // Default factor for unknown vehicle types
+            logger.warn("Vehicle type factor not found for: {}", normalizedVehicleType);
+            throw new InvalidVehicleTypeException("Unknown vehicle type: " + normalizedVehicleType);
         }
         
         return factor;
